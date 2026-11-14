@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Automotive Interior Material Lab — WebGPU</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">AIML</span>
+          <span class="brand-title">内饰材质实时预览台</span>
+          <span class="brand-sub">Automotive Interior Material Lab · WebGPU</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="stat" id="stat-fps" title="实际呈现帧耗时（GPU 时间戳查询；不可用时回退到提交间隔）">
+            <label>帧耗时</label><b>—</b>
+          </div>
+          <div class="stat" id="stat-gpu" title="从 adapter.info 与估算缓冲区/纹理字节数获得">
+            <label>显存占用</label><b>—</b>
+          </div>
+          <div class="stat" id="stat-adapter">
+            <label>适配器</label><b>—</b>
+          </div>
+          <button id="btn-recover" class="btn" title="强制释放并重建 GPUDevice 与全部资源">重建设备</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel panel-left" aria-label="样块与材质">
+          <section class="group">
+            <h2>样块 <small>Swatch</small></h2>
+            <div id="swatch-list" class="swatch-list"></div>
+          </section>
+
+          <section class="group">
+            <h2>材质参数 <small>Material</small></h2>
+            <div id="material-controls"></div>
+          </section>
+
+          <section class="group">
+            <h2>法线贴图 <small>Normal</small></h2>
+            <div id="normal-controls"></div>
+            <p class="hint">
+              法线图以 <code>rgba8unorm</code> 存储切线空间方向（<code>n*0.5+0.5</code>），着色器显式做 <code>2n-1</code> 解码，
+              不经过任何 sRGB 或颜色路径。
+            </p>
+          </section>
+        </aside>
+
+        <section class="viewport-shell">
+          <canvas id="viewport" aria-label="材质预览视图"></canvas>
+          <div id="viewport-overlay" class="overlay" hidden>
+            <div class="overlay-card">
+              <h3 id="overlay-title">渲染中断</h3>
+              <p id="overlay-body"></p>
+              <div class="overlay-actions">
+                <button id="btn-overlay-retry" class="btn btn-primary">重建并重绘</button>
+              </div>
+            </div>
+          </div>
+          <div id="toast" class="toast" hidden></div>
+          <div class="viewport-legend">
+            <div><span class="dot" id="legend-dot"></span><span id="legend-name">—</span></div>
+            <div class="legend-meta" id="legend-meta"></div>
+          </div>
+        </section>
+
+        <aside class="panel panel-right" aria-label="相机、灯光与验证">
+          <section class="group">
+            <h2>相机 <small>Camera</small></h2>
+            <div id="camera-controls"></div>
+          </section>
+
+          <section class="group">
+            <h2>灯光 <small>Lighting</small></h2>
+            <div id="light-controls"></div>
+          </section>
+
+          <section class="group">
+            <h2>曝光 <small>Exposure</small></h2>
+            <div id="exposure-controls"></div>
+          </section>
+
+          <section class="group">
+            <h2>预设 <small>Presets</small></h2>
+            <div id="preset-controls"></div>
+            <p class="hint">预设保存相机、灯光、曝光、当前样块与材质参数；读取时按序重放并重建纹理。</p>
+          </section>
+
+          <section class="group">
+            <h2>基准与验证 <small>Bench</small></h2>
+            <div id="bench-controls"></div>
+            <div id="bench-report" class="bench-report"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
