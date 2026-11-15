@@ -1,19 +1,37 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { loadReleaseConfig } from '../../scripts/lib/config.mjs';
+import { chromiumLaunchArgs, findChrome, findVulkanIcd, launchEnvironment, libraryPaths } from '../../scripts/lib/environment.mjs';
+import { startStaticServer } from '../../scripts/lib/server.mjs';
+
 const require = createRequire(import.meta.url);
-const pngjs = require('/tmp/webgpu-probe/node_modules/pngjs');
+const pngjs = require('pngjs');
 
-const EXE = '/home/node/.cache/ms-playwright/chromium-1187/chrome-linux/chrome';
-const LIB = '/tmp/sysroot/root/usr/lib/aarch64-linux-gnu:/tmp/sysroot/root/lib/aarch64-linux-gnu';
-const ICD = '/home/node/.cache/ms-playwright/chromium-1187/chrome-linux/vk_swiftshader_icd.json';
-const URL = process.env.APP_URL ?? 'http://127.0.0.1:5173/';
+// The e2e suite must launch the same way the release gate does. Browser path, ICD and
+// library path are discovered from the environment rather than hardcoded to /tmp.
+const config = loadReleaseConfig();
+const EXE = process.env.AIML_CHROME ?? findChrome();
+const ICD = findVulkanIcd(EXE);
+const LIB = libraryPaths(EXE);
+const APP_URL = process.env.APP_URL ?? null;
+let server = null;
+let targetUrl = APP_URL;
+// With no APP_URL we serve the built dist/ ourselves, so the e2e run exercises the
+// same packaged files as the release gate. `npm run build` must have run first.
+if (!targetUrl) {
+  const distDir = fileURLToPath(new URL('../../dist/', import.meta.url));
+  if (!fs.existsSync(distDir)) {
+    console.error('未找到 dist/。请先运行 `npm run build`，或设置 APP_URL 指向已启动的开发服务器。');
+    process.exit(2);
+  }
+  server = await startStaticServer(distDir);
+  targetUrl = server.url;
+}
 
-const args = [
-  '--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-webgpu',
-  '--enable-features=Vulkan', '--use-angle=vulkan', '--use-vulkan=swiftshader',
-];
-const env = { ...process.env, LD_LIBRARY_PATH: LIB, VK_ICD_FILENAMES: ICD };
+const args = chromiumLaunchArgs(config);
+const env = launchEnvironment(config, { icd: ICD, libraryPath: LIB });
 
 const logFile = fs.createWriteStream('/tmp/aiml-e2e.log', { flags: 'w' });
 const origLog = console.log.bind(console);
@@ -44,7 +62,7 @@ function check(name, pass, detail = '') {
 
 try {
   write('goto...');
-  await page.goto(URL, { waitUntil: 'load' });
+  await page.goto(targetUrl, { waitUntil: 'load' });
   write('waitReady...');
   await waitReady(20000).catch(async (e) => {
     write('waitReady failed: ' + e.message);
@@ -75,9 +93,14 @@ try {
   check('WebGPU 设备与画布就绪', info.size.width > 0 && info.size.height > 0, `${info.size.width}x${info.size.height}`);
   check('渲染统计数据可用', info.resourceBytes > 0, `${info.resourceBytes} bytes`);
 
-  // Screenshot the canvas element itself and measure non-black content. This is the
-  // real presented swapchain, not a re-render.
-  const shotBuf = await page.locator('#viewport').screenshot();
+  // Read the presented canvas through its own snapshot path. A compositor element
+  // screenshot returns blank under headless SwiftShader even when the swapchain is
+  // correct, so toDataURL is the real frame.
+  const shotBuf = Buffer.from(
+    (await page.evaluate(() => document.getElementById('viewport').toDataURL('image/png')))
+      .replace(/^data:image\/png;base64,/, ''),
+    'base64',
+  );
   fs.writeFileSync('/tmp/aiml-canvas.png', shotBuf);
   const canvasSample = (() => {
     const { PNG } = pngjs;
@@ -202,7 +225,9 @@ try {
     const app = window.__app;
     app.state.camera.yaw = 0.77;
     app.state.exposure.stops = 1.25;
-    app.state.material.roughness = 0.111;
+    // Material is owned by the kernel, so it is mutated through the kernel rather than
+    // by writing the read-only snapshot mirror.
+    app.kernel.setParam('roughness', 0.111);
     const saved = app.currentPresetState();
     // simulate save + reload through localStorage key used by the app
     const key = 'aiml.presets.v1';
@@ -212,9 +237,9 @@ try {
     const parsed = JSON.parse(raw).presets[0].state;
     const same = JSON.stringify(parsed) === JSON.stringify(saved);
     if (prev === null) localStorage.removeItem(key); else localStorage.setItem(key, prev);
-    return { same, saved, parsed };
+    return { same, saved, parsed, kernelRoughness: app.kernel.snapshot.params.roughness };
   });
-  check('预设序列化往返逐字节一致', roundTrip.same, JSON.stringify(roundTrip.saved.camera));
+  check('预设序列化往返逐字节一致', roundTrip.same && roundTrip.kernelRoughness === 0.111, JSON.stringify(roundTrip.saved.camera));
 
   // --- resize rebuild -----------------------------------------------------
   await page.setViewportSize({ width: 1100, height: 760 });
@@ -266,4 +291,5 @@ try {
   process.exitCode = 2;
 } finally {
   await browser.close();
+  if (server) await server.close();
 }

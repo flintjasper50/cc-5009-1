@@ -7,6 +7,8 @@ import {
   type GpuContext,
   type GpuDiagnostics,
   type ResourceHandle,
+  type ShaderCompileInfo,
+  type ShaderCompileState,
 } from './device.ts';
 import {
   buildSceneGeometry,
@@ -26,6 +28,7 @@ import {
   mat4Multiply,
   mat4Perspective,
   mat4Identity,
+  mat4FromTRS,
   normalMatrixFromModel,
   type Mat4,
 } from '../math/linalg.ts';
@@ -122,6 +125,7 @@ export class Renderer {
   private canvasContext: GPUCanvasContext;
   private lost = false;
   private disposed = false;
+  private onLost: (message: string) => void = () => {};
 
   private frameLayout!: GPUBindGroupLayout;
   private modelLayout!: GPUBindGroupLayout;
@@ -155,10 +159,14 @@ export class Renderer {
   private timestampPending = false;
   private gpuMs: number | null = null;
 
+  private compileState: ShaderCompileState = { ready: false, modules: [], pipelines: [], ok: false, unsupported: false };
+  private compilePromise: Promise<ShaderCompileState> | null = null;
+  private resolveCompile: ((state: ShaderCompileState) => void) | null = null;
+
   static async create(canvas: HTMLCanvasElement, onLost: (message: string) => void): Promise<Renderer> {
     const ctx = await createGpuContext();
     const renderer = new Renderer(canvas, ctx);
-    renderer.init(onLost);
+    await renderer.init(onLost);
     return renderer;
   }
 
@@ -172,13 +180,15 @@ export class Renderer {
 
   get diagnostics(): GpuDiagnostics { return this.ctx.diagnostics; }
   get gpuTimeMs(): number | null { return this.gpuMs; }
+  get shaders(): ShaderCompileState { return this.compileState; }
   get resourceBytes(): number { return this.ledger.total(); }
   get resourceCounts(): Record<string, number> { return this.ledger.counts(); }
   get isLost(): boolean { return this.lost; }
   get isDisposed(): boolean { return this.disposed; }
   get size(): { width: number; height: number } { return { width: this.width, height: this.height }; }
 
-  private init(onLost: (message: string) => void): void {
+  private async init(onLost: (message: string) => void): Promise<void> {
+    this.onLost = onLost;
     const { device } = this.ctx;
     const geometry = buildSceneGeometry();
     this.uploadMesh('dashboard', geometry.dashboard);
@@ -225,7 +235,7 @@ export class Renderer {
 
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.modelLayout, this.texLayout] });
 
-    this.studioPipeline = device.createRenderPipeline({
+    const studioPipeline = device.createRenderPipelineAsync({
       label: 'studio-hdr',
       layout: pipelineLayout,
       vertex: { module: sceneModule, entryPoint: 'vs_main', buffers: [vertexLayout] },
@@ -233,8 +243,7 @@ export class Renderer {
       primitive: { topology: 'triangle-list', cullMode: 'none' },
       depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
     });
-
-    this.benchPipeline = device.createRenderPipeline({
+    const benchPipeline = device.createRenderPipelineAsync({
       label: 'bench-rgba8',
       layout: pipelineLayout,
       vertex: { module: sceneModule, entryPoint: 'vs_main', buffers: [vertexLayout] },
@@ -242,14 +251,37 @@ export class Renderer {
       primitive: { topology: 'triangle-list', cullMode: 'none' },
       depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
     });
-
-    this.compositePipeline = device.createRenderPipeline({
+    const compositePipeline = device.createRenderPipelineAsync({
       label: 'composite',
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.compositeLayout] }),
       vertex: { module: compositeModule, entryPoint: 'vs_fullscreen' },
       fragment: { module: compositeModule, entryPoint: 'fs_composite', targets: [{ format: this.ctx.canvasFormat }] },
       primitive: { topology: 'triangle-list' },
     });
+
+    // A rejected pipeline promise must still record a failed compile state rather than
+    // aborting init before the state exists.
+    const settled = await Promise.allSettled([studioPipeline, benchPipeline, compositePipeline]);
+    const labels = ['studio-hdr', 'bench-rgba8', 'composite'] as const;
+    const failures: { label: string; ok: boolean; error?: string }[] = [];
+    settled.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        const pipeline = result.value;
+        if (labels[i] === 'studio-hdr') this.studioPipeline = pipeline;
+        else if (labels[i] === 'bench-rgba8') this.benchPipeline = pipeline;
+        else this.compositePipeline = pipeline;
+      } else {
+        failures.push({ label: labels[i], ok: false, error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+      }
+    });
+    void this.collectCompilation(
+      [
+        { label: 'scene-shader', module: sceneModule },
+        { label: 'composite-shader', module: compositeModule },
+      ],
+      labels.map((label, i) => ({ label, result: settled[i] })),
+      failures,
+    );
 
     this.sampler = device.createSampler({
       label: 'material-sampler',
@@ -299,6 +331,70 @@ export class Renderer {
       this.lost = true;
       onLost(`${info.reason}: ${info.message || '（无详细信息）'}`);
     });
+  }
+
+  private finishCompilation(state: ShaderCompileState): void {
+    this.compileState = state;
+    this.resolveCompile?.(state);
+    this.resolveCompile = null;
+  }
+
+  async awaitCompilation(): Promise<ShaderCompileState> {
+    if (this.compileState.ready) return this.compileState;
+    if (!this.compilePromise) {
+      this.compilePromise = new Promise<ShaderCompileState>((resolve) => { this.resolveCompile = resolve; });
+    }
+    return this.compilePromise;
+  }
+
+  // Compilation is an explicit build gate: a module that fails to compile or a
+  // pipeline that fails to create keeps the release unverified instead of letting
+  // the app present a blank frame as if it had rendered.
+  private async collectCompilation(
+    modules: { label: string; module: GPUShaderModule }[],
+    pipelines: { label: string; result: PromiseSettledResult<GPURenderPipeline> }[],
+    preFailures: { label: string; ok: boolean; error?: string }[] = [],
+  ): Promise<void> {
+    let unsupported = false;
+    const reports: ShaderCompileInfo[] = [];
+    for (const entry of modules) {
+      let info: GPUCompilationInfo;
+      try {
+        info = await entry.module.getCompilationInfo();
+      } catch (error) {
+        if (error instanceof TypeError) {
+          unsupported = true;
+          reports.push({ label: entry.label, ok: true, messages: [{ type: 'info', message: '浏览器未实现 getCompilationInfo', lineNum: 0, linePos: 0 }] });
+          continue;
+        }
+        reports.push({
+          label: entry.label,
+          ok: false,
+          messages: [{ type: 'error', message: `getCompilationInfo 失败：${error instanceof Error ? error.message : String(error)}`, lineNum: 0, linePos: 0 }],
+        });
+        continue;
+      }
+      const messages = info.messages.map((m) => ({
+        type: m.type,
+        message: m.message,
+        lineNum: m.lineNum,
+        linePos: m.linePos,
+      }));
+      reports.push({ label: entry.label, ok: !messages.some((m) => m.type === 'error'), messages });
+    }
+
+    const pipeResults: { label: string; ok: boolean; error?: string }[] = [...preFailures];
+    for (const entry of pipelines) {
+      if (entry.result.status === 'fulfilled') {
+        pipeResults.push({ label: entry.label, ok: true });
+      } else if (!pipeResults.some((p) => p.label === entry.label)) {
+        const reason = entry.result.reason;
+        pipeResults.push({ label: entry.label, ok: false, error: reason instanceof Error ? reason.message : String(reason) });
+      }
+    }
+
+    const ok = reports.every((r) => r.ok) && pipeResults.every((p) => p.ok);
+    this.finishCompilation({ ready: true, modules: reports, pipelines: pipeResults, ok, unsupported });
   }
 
   private uploadMesh(key: MeshKey, mesh: MeshData): void {
@@ -718,10 +814,14 @@ export class Renderer {
     this.ctx.device.queue.writeBuffer(this.frameBuffer, 0, bytes);
   }
 
-  // Deliberately kills the device so the app exercises its recovery path.
+  // Deliberately kills the device so the app exercises its recovery path. The loss is
+  // reported synchronously: `device.lost` resolves on the GPU process's schedule, and a
+  // frame readout or overlay that waits for it would keep showing stale values.
   simulateDeviceLoss(): void {
+    if (this.lost) return;
     this.lost = true;
     this.ctx.device.destroy();
+    this.onLost('destroyed: 模拟设备丢失');
   }
 
   dispose(): void {
@@ -823,6 +923,7 @@ export function studioItems(opts: {
   textureSets: Record<string, TextureSet>;
   nonUniformScale: boolean;
   showSoftpad: boolean;
+  specimen?: { yaw: number; pitch: number };
 }): DrawItem[] {
   const make = (mesh: MeshKey, params: MaterialParams, swatchId: SwatchId, model: Mat4): DrawItem => ({
     mesh,
@@ -851,7 +952,29 @@ export function studioItems(opts: {
     make('trim', trimParams, trimId, trimModel),
   ];
   if (opts.showSoftpad) list.push(make('softpad', padParams, padId, centeredScaleModel([0.54, 0.10, 0.295], padScale)));
+
+  // The selected specimen rotates about its own centre; every other mesh keeps its
+  // authored transform so rotating the sample cannot shift the surrounding scene.
+  if (opts.specimen && (opts.specimen.yaw !== 0 || opts.specimen.pitch !== 0)) {
+    const targetIndex = opts.swatchTarget === 'dashboard' ? 0 : opts.swatchTarget === 'trim' ? 1 : opts.showSoftpad ? 2 : -1;
+    if (targetIndex >= 0) {
+      const pivot = opts.swatchTarget === 'softpad' ? [0.54, 0.10, 0.295] : opts.swatchTarget === 'trim' ? [0, 0.24, 0.28] : [0, 0.17, 0.31];
+      const rotation = mat4FromTRS([0, 0, 0], opts.specimen.yaw, opts.specimen.pitch, [1, 1, 1]);
+      list[targetIndex] = { ...list[targetIndex], model: rotationAboutPivot(rotation, pivot) };
+    }
+  }
   return list;
+}
+
+// T(p) * R * T(-p): rotate a specimen about its own centre while it stays seated in
+// the studio. The model matrix keeps its non-uniform scale on the cushion because the
+// rotation is applied outside the existing scaled transform.
+function rotationAboutPivot(rotation: Mat4, pivot: number[]): Mat4 {
+  const toOrigin = mat4Identity();
+  toOrigin[12] = -pivot[0]; toOrigin[13] = -pivot[1]; toOrigin[14] = -pivot[2];
+  const back = mat4Identity();
+  back[12] = pivot[0]; back[13] = pivot[1]; back[14] = pivot[2];
+  return mat4Multiply(back, mat4Multiply(rotation, toOrigin));
 }
 
 // Scale about a pivot: T(p) * S * T(-p). Keeps the object anchored while making the

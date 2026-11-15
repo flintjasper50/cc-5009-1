@@ -1,0 +1,26 @@
+{
+  "schema": "aiml.reference.frame/v1",
+  "note": "首轮门禁从真实帧生成；此后该文件的差异会阻断发布。",
+  "fixture": {
+    "swatch": "leather-black",
+    "roughness": 0.62,
+    "camera": {
+      "yaw": 0.34,
+      "pitch": 0.22,
+      "distance": 2.15,
+      "target": [
+        0.12,
+        0.24,
+        0.3
+      ],
+      "fovY": 0.6
+    }
+  },
+  "frame": {
+    "width": 842,
+    "height": 835,
+    "mean": 37.06,
+    "max": 255,
+    "opaqueRatio": 1
+  }
+}

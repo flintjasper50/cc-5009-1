@@ -9,6 +9,25 @@ export interface GpuDiagnostics {
   timestampSupported: boolean;
   maxTextureDimension2D: number;
   maxBufferSize: number;
+  /** Whether the probe ran against a software rasteriser rather than real hardware. */
+  softwareRasterizer: boolean;
+  vendor: string;
+  architecture: string;
+}
+
+export interface ShaderCompileInfo {
+  label: string;
+  ok: boolean;
+  messages: { type: string; message: string; lineNum: number; linePos: number }[];
+}
+
+export interface ShaderCompileState {
+  ready: boolean;
+  modules: ShaderCompileInfo[];
+  pipelines: { label: string; ok: boolean; error?: string }[];
+  ok: boolean;
+  /** True when the browser refused to report compilation info at all. */
+  unsupported: boolean;
 }
 
 export interface GpuContext {
@@ -117,6 +136,8 @@ export async function createGpuContext(): Promise<GpuContext> {
   const device = await adapter.requestDevice({ requiredFeatures, requiredLimits });
 
   const info = adapter.info as GPUAdapterInfo | undefined;
+  const vendor = info?.vendor ?? '';
+  const architecture = info?.architecture ?? '';
   const diagnostics: GpuDiagnostics = {
     adapterLabel: describeAdapter(info),
     backend: (info as { backend?: string } | undefined)?.backend ?? 'webgpu',
@@ -124,9 +145,20 @@ export async function createGpuContext(): Promise<GpuContext> {
     timestampSupported,
     maxTextureDimension2D: device.limits.maxTextureDimension2D,
     maxBufferSize: device.limits.maxBufferSize,
+    softwareRasterizer: isSoftwareAdapter(info),
+    vendor,
+    architecture,
   };
 
   return { adapter, device, format: 'rgba16float', canvasFormat: navigator.gpu.getPreferredCanvasFormat(), diagnostics };
+}
+
+// A software rasteriser reports itself through the adapter architecture
+// (SwiftShader / llvmpipe / lavapipe). The release gate uses this to distinguish a
+// real hardware frame from a fallback image, which must never be presented as verified.
+export function isSoftwareAdapter(info: GPUAdapterInfo | undefined): boolean {
+  const haystack = `${info?.description ?? ''} ${info?.vendor ?? ''} ${info?.architecture ?? ''}`.toLowerCase();
+  return /swiftshader|llvmpipe|softpipe|lavapipe|software/.test(haystack);
 }
 
 function describeAdapter(info: GPUAdapterInfo | undefined): string {

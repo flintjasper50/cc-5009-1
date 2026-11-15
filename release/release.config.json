@@ -1,0 +1,66 @@
+{
+  "schema": "aiml.release.config/v1",
+  "app": {
+    "name": "automotive-interior-material-lab",
+    "entry": "index.html",
+    "expectedTitleIncludes": "Interior Material Lab"
+  },
+  "build": {
+    "command": ["npm", "run", "build"],
+    "outputDir": "dist",
+    "mustExist": ["index.html"],
+    "forbidPaths": ["src", "node_modules", "tests", "scripts", "release"],
+    "minMainJsBytes": 20000
+  },
+  "render": {
+    "backend": "webgpu",
+    "requiredAdapterFeature": "timestamp-query",
+    "requiredLimits": {
+      "maxTextureDimension2D": 2048
+    },
+    "requiredTextureFormats": ["rgba8unorm", "rgba8unorm-srgb", "depth24plus"],
+    "requiredFloatTargets": ["rgba16float"],
+    "allowSoftwareRasterizer": false
+  },
+  "fixtures": {
+    "swatch": "leather-black",
+    "preset": "builtin-studio-leather",
+    "camera": { "yaw": 0.34, "pitch": 0.22, "distance": 2.15, "target": [0.12, 0.24, 0.30], "fovY": 0.6 },
+    "roughness": 0.62,
+    "roughnessAlt": 0.16,
+    "rotatedYaw": 0.9,
+    "referenceFrame": "artifacts/reference/interior-leather-reference.json"
+  },
+  "gates": {
+    "shadersMustCompile": true,
+    "frameMustBeNonBlank": true,
+    "materialChangeMustAlterFrame": true,
+    "rotationMustAlterFrame": true,
+    "benchMaxAbsError": 2,
+    "minFrameMeanLuma": 4,
+    "minChangedPixelRatio": 0.004,
+    "noHalfAppliedMaterial": true
+  },
+  "artifacts": {
+    "dir": "artifacts",
+    "framesDir": "artifacts/frames",
+    "evidenceFile": "artifacts/evidence/release-evidence.json"
+  },
+  "launch": {
+    "args": [
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--enable-unsafe-webgpu",
+      "--enable-features=Vulkan",
+      "--use-angle=swiftshader",
+      "--use-webgpu-adapter=swiftshader",
+      "--disable-gpu-sandbox",
+      "--disable-vulkan-surface"
+    ],
+    "env": {
+      "VK_ICD_FILENAMES": "$ICD",
+      "VK_DRIVER_FILES": "$ICD",
+      "LD_LIBRARY_PATH": "$LIBRARY_PATH"
+    }
+  }
+}

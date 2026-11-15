@@ -11,7 +11,6 @@ import {
   DEFAULT_LIGHTING,
   MATERIAL_BOUNDS,
   SWATCHES,
-  clampParams,
   swatchById,
   type CameraState,
   type ExposureState,
@@ -39,25 +38,36 @@ import {
   type StoredPreset,
 } from './presets/presets.ts';
 import { hexToSrgb } from './math/color.ts';
+import { MaterialKernel, SPECIMEN_BOUNDS, type KernelSnapshot } from './scene/kernel.ts';
+import type { ShaderCompileState } from './gpu/device.ts';
 
 interface AppState {
   camera: CameraState;
   lighting: LightingState;
   exposure: ExposureState;
-  swatch: SwatchId;
-  material: MaterialParams;
   showSoftpad: boolean;
   nonUniformScale: boolean;
+
+  // Mirrors of the kernel snapshot. The kernel is the single writer for swatch,
+  // material and specimen state; these accessors keep the rest of the app reading
+  // the same shape it always has.
+  readonly swatch: SwatchId;
+  readonly material: MaterialParams;
 }
+
+const kernel = new MaterialKernel({
+  swatch: 'leather-black',
+  params: SWATCHES[0].defaults,
+});
 
 const state: AppState = {
   camera: structuredClone(DEFAULT_CAMERA),
   lighting: structuredClone(DEFAULT_LIGHTING),
   exposure: structuredClone(DEFAULT_EXPOSURE),
-  swatch: 'leather-black',
-  material: { ...SWATCHES[0].defaults },
   showSoftpad: true,
   nonUniformScale: false,
+  get swatch(): SwatchId { return kernel.snapshot.swatch; },
+  get material(): MaterialParams { return kernel.snapshot.params; },
 };
 
 let renderer: Renderer | null = null;
@@ -79,6 +89,7 @@ const el = {
   swatchList: byId<HTMLDivElement>('swatch-list'),
   material: byId<HTMLDivElement>('material-controls'),
   normal: byId<HTMLDivElement>('normal-controls'),
+  specimen: byId<HTMLDivElement>('specimen-controls'),
   camera: byId<HTMLDivElement>('camera-controls'),
   light: byId<HTMLDivElement>('light-controls'),
   exposure: byId<HTMLDivElement>('exposure-controls'),
@@ -208,13 +219,15 @@ function stopLoop(): void {
 }
 
 function buildFrame() {
+  const snap = kernel.snapshot;
   const items: DrawItem[] = studioItems({
-    swatchId: state.swatch,
-    swatchTarget: swatchById(state.swatch).target,
-    material: state.material,
+    swatchId: snap.swatch,
+    swatchTarget: swatchById(snap.swatch).target,
+    material: snap.params,
     textureSets: textures,
     nonUniformScale: state.nonUniformScale,
     showSoftpad: state.showSoftpad,
+    specimen: snap.specimen,
   });
   return {
     camera: state.camera,
@@ -309,11 +322,11 @@ function chipBackground(id: SwatchId, baseColor: string): string {
 }
 
 function selectSwatch(id: SwatchId): void {
-  state.swatch = id;
-  state.material = { ...swatchById(id).defaults };
+  if (!kernel.setSwatch(id)) return;
   renderSwatches();
   renderMaterialControls();
   renderNormalControls();
+  renderSpecimenControls();
   updateLegend();
   needsDraw = true;
 }
@@ -322,9 +335,10 @@ function renderMaterialControls(): void {
   el.material.replaceChildren();
   const b = MATERIAL_BOUNDS;
   el.material.append(colorPicker('基础色（sRGB）', state.material.baseColor, (hex) => {
-    state.material.baseColor = hex;
-    needsDraw = true;
-    updateLegend();
+    if (kernel.setParam('baseColor', hex)) {
+      needsDraw = true;
+      updateLegend();
+    }
   }));
   el.material.append(slider({
     label: '基础色纹理着色', min: 0.2, max: 1, step: 0.01, value: 1,
@@ -334,32 +348,60 @@ function renderMaterialControls(): void {
   el.material.append(slider({
     label: '粗糙度 roughness', min: b.roughness[0], max: b.roughness[1], step: 0.005, value: state.material.roughness,
     format: (v) => v.toFixed(3),
-    onInput: (v) => { state.material.roughness = v; needsDraw = true; updateLegend(); },
+    onInput: (v) => { if (kernel.setParam('roughness', v)) { needsDraw = true; updateLegend(); } },
   }));
   el.material.append(slider({
     label: '金属度 metallic', min: b.metallic[0], max: b.metallic[1], step: 0.01, value: state.material.metallic,
     format: (v) => v.toFixed(2),
-    onInput: (v) => { state.material.metallic = v; needsDraw = true; updateLegend(); },
+    onInput: (v) => { if (kernel.setParam('metallic', v)) { needsDraw = true; updateLegend(); } },
   }));
   el.material.append(slider({
     label: '纹理平铺 uvScale', min: b.uvScale[0], max: b.uvScale[1], step: 0.05, value: state.material.uvScale,
     format: (v) => `${v.toFixed(2)}×`,
-    onInput: (v) => { state.material.uvScale = v; needsDraw = true; },
+    onInput: (v) => { if (kernel.setParam('uvScale', v)) needsDraw = true; },
   }));
+}
+
+// Specimen rotation is driven by the same kernel as the material: an out-of-range
+// angle is rejected and reported instead of being silently clamped, and the failure
+// is echoed back into the interior material panel.
+function renderSpecimenControls(): void {
+  if (!el.specimen) return;
+  el.specimen.replaceChildren();
+  const snap = kernel.snapshot;
+  el.specimen.append(slider({
+    label: '样件旋转 yaw', min: SPECIMEN_BOUNDS.yaw[0], max: SPECIMEN_BOUNDS.yaw[1], step: 0.01, value: snap.specimen.yaw,
+    format: (v) => `${(v * 180 / Math.PI).toFixed(0)}°`,
+    onInput: (v) => { if (kernel.setSpecimenYaw(v)) needsDraw = true; },
+  }));
+  el.specimen.append(slider({
+    label: '样件俯仰 pitch', min: SPECIMEN_BOUNDS.pitch[0], max: SPECIMEN_BOUNDS.pitch[1], step: 0.01, value: snap.specimen.pitch,
+    format: (v) => `${(v * 180 / Math.PI).toFixed(0)}°`,
+    onInput: (v) => { if (kernel.setSpecimenPitch(v)) needsDraw = true; },
+  }));
+  const failure = snap.failure;
+  if (failure) {
+    const note = document.createElement('p');
+    note.className = 'kernel-failure';
+    note.setAttribute('role', 'alert');
+    note.textContent = `未应用（${failure.command}）：${failure.message}`;
+    el.specimen.append(note);
+  }
 }
 
 function renderNormalControls(): void {
   el.normal.replaceChildren();
   el.normal.append(checkbox('启用法线贴图', state.material.normalEnabled, (v) => {
-    state.material.normalEnabled = v;
-    needsDraw = true;
-    updateLegend();
+    if (kernel.setParam('normalEnabled', v)) {
+      needsDraw = true;
+      updateLegend();
+    }
   }));
   el.normal.append(slider({
     label: '法线强度', min: MATERIAL_BOUNDS.normalStrength[0], max: MATERIAL_BOUNDS.normalStrength[1], step: 0.01,
     value: state.material.normalStrength,
     format: (v) => v.toFixed(2),
-    onInput: (v) => { state.material.normalStrength = v; needsDraw = true; },
+    onInput: (v) => { if (kernel.setParam('normalStrength', v)) needsDraw = true; },
   }));
 }
 
@@ -467,17 +509,24 @@ function currentPresetState(): PresetState {
 }
 
 function applyPresetState(preset: PresetState): void {
+  // The kernel owns swatch + material and validates the whole preset before it
+  // mutates anything. Camera/lighting/exposure are only assigned after that succeeds,
+  // so a rejected preset leaves the studio exactly as it was instead of shipping a
+  // half-applied look.
+  if (!kernel.applyPreset(preset)) {
+    showToast(`预设未通过内核校验：${kernel.snapshot.failure?.message ?? '未知原因'}`, 'bad');
+    return;
+  }
   state.camera = preset.camera;
   state.lighting = preset.lighting;
   state.exposure = preset.exposure;
-  state.swatch = preset.swatch;
-  state.material = clampParams(preset.material);
   renderSwatches();
   renderCameraControls();
   renderLightControls();
   renderExposureControls();
   renderMaterialControls();
   renderNormalControls();
+  renderSpecimenControls();
   updateLegend();
   needsDraw = true;
 }
@@ -686,6 +735,20 @@ function escapeHtml(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Kernel wiring
+// ---------------------------------------------------------------------------
+
+// Every kernel mutation re-renders the controls derived from its snapshot. A rejected
+// command keeps the previous material and is echoed into the interior material panel.
+kernel.subscribe((snap: KernelSnapshot) => {
+  renderSpecimenControls();
+  if (snap.failure) {
+    showToast(`未应用 ${snap.failure.command}：${snap.failure.message}`, 'bad');
+    updateLegend();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
@@ -695,6 +758,7 @@ renderLightControls();
 renderExposureControls();
 renderMaterialControls();
 renderNormalControls();
+renderSpecimenControls();
 presets = loadPresets();
 renderPresetControls();
 renderBenchControls();
@@ -717,4 +781,26 @@ void boot();
   },
   currentPresetState,
   hexToSrgb,
+  kernel,
+  buildFrame,
+  kernelSnapshot: () => kernel.snapshot,
+};
+
+// Live kernel state for cold-start verification: the release gate reads the same
+// snapshot the UI renders from, not a value scraped from the DOM.
+declare global {
+  interface Window {
+    __aimlRelease?: {
+      kernel: () => KernelSnapshot;
+      shaders: () => ShaderCompileState | null;
+      diagnostics: () => unknown;
+      renderer: () => Renderer | null;
+    };
+  }
+}
+(window as unknown as { __aimlRelease?: unknown }).__aimlRelease = {
+  kernel: () => kernel.snapshot,
+  shaders: () => (renderer ? renderer.shaders : null),
+  diagnostics: () => (renderer ? renderer.diagnostics : null),
+  renderer: () => renderer,
 };

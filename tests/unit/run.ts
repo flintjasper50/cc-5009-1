@@ -55,6 +55,7 @@ import {
   buildTextureSet,
   SWATCH_SPECS,
 } from '../../src/scene/textures.ts';
+import { MaterialKernel, SPECIMEN_BOUNDS } from '../../src/scene/kernel.ts';
 
 let passed = 0;
 let failed = 0;
@@ -365,6 +366,72 @@ test('generated normal maps decode to unit vectors and stay mostly tangent-facin
     }
   }
   assert.ok(facing / decoded > 0.9, `only ${(100 * facing / decoded).toFixed(1)}% of normals face outward`);
+});
+
+// --- Interior material kernel ------------------------------------------------
+// The kernel is the single writer for swatch/material/specimen state. These checks
+// pin its contract: an invalid command is rejected whole, the failure is reported,
+// and nothing is half-applied.
+
+test('kernel rejects an out-of-range parameter whole and reports the failure', () => {
+  const kernel = new MaterialKernel({ swatch: 'leather-black', params: SWATCHES[0].defaults });
+  const before = kernel.snapshot;
+  assert.equal(kernel.setParam('roughness', 5), false);
+  const after = kernel.snapshot;
+  assert.equal(after.params.roughness, before.params.roughness, 'roughness changed after rejection');
+  assert.equal(after.revision, before.revision, 'revision advanced after rejection');
+  assert.equal(after.failure?.code, 'param-out-of-range');
+});
+
+test('kernel rejects a malformed base colour without touching other fields', () => {
+  const kernel = new MaterialKernel({ swatch: 'leather-black', params: SWATCHES[0].defaults });
+  const before = kernel.snapshot;
+  assert.equal(kernel.setParam('baseColor', 'red'), false);
+  const after = kernel.snapshot;
+  assert.deepEqual(after.params, before.params);
+  assert.equal(after.failure?.code, 'param-out-of-range');
+});
+
+test('kernel rejects specimen angles outside the documented bounds', () => {
+  const kernel = new MaterialKernel({ swatch: 'leather-black', params: SWATCHES[0].defaults });
+  assert.equal(kernel.setSpecimenYaw(99), false);
+  assert.equal(kernel.snapshot.specimen.yaw, 0);
+  assert.equal(kernel.snapshot.failure?.code, 'specimen-out-of-range');
+  // In-range commands commit and clear the failure.
+  assert.equal(kernel.setSpecimenYaw(0.5), true);
+  assert.equal(kernel.snapshot.failure, null);
+  assert.equal(kernel.snapshot.specimen.yaw, 0.5);
+});
+
+test('a preset with one bad field is rejected whole, not partially applied', () => {
+  const kernel = new MaterialKernel({ swatch: 'leather-black', params: SWATCHES[0].defaults });
+  const before = kernel.snapshot;
+  const broken = {
+    ...BUILTIN_PRESETS[0].state,
+    swatch: 'piano-gloss' as const,
+    material: { ...BUILTIN_PRESETS[0].state.material, roughness: 3 },
+  };
+  assert.equal(kernel.applyPreset(broken), false);
+  const after = kernel.snapshot;
+  assert.equal(after.swatch, before.swatch, 'swatch switched despite rejected preset');
+  assert.deepEqual(after.params, before.params, 'material changed despite rejected preset');
+  assert.equal(after.failure?.code, 'invalid-value');
+});
+
+test('a valid preset commits swatch and material together', () => {
+  const kernel = new MaterialKernel({ swatch: 'leather-black', params: SWATCHES[0].defaults });
+  assert.equal(kernel.applyPreset(BUILTIN_PRESETS[1].state), true);
+  const snap = kernel.snapshot;
+  assert.equal(snap.swatch, 'piano-gloss');
+  assert.equal(snap.params.roughness, BUILTIN_PRESETS[1].state.material.roughness);
+  assert.equal(snap.failure, null);
+});
+
+test('selecting a swatch resets material to that swatch defaults', () => {
+  const kernel = new MaterialKernel({ swatch: 'leather-black', params: SWATCHES[0].defaults });
+  assert.equal(kernel.setSwatch('piano-gloss'), true);
+  const piano = SWATCHES.find((s) => s.id === 'piano-gloss')!;
+  assert.deepEqual(kernel.snapshot.params, piano.defaults);
 });
 
 function applyNM(nm: Float32Array, v: Vec3): Vec3 {

@@ -1,0 +1,596 @@
+{
+  "schema": "aiml.release.evidence/v1",
+  "startedAt": "2026-11-15T12:38:36.251Z",
+  "configFile": "release/release.config.json",
+  "configSchema": "aiml.release.config/v1",
+  "environment": {
+    "chrome": "/home/node/.cache/ms-playwright/chromium-1187/chrome-linux/chrome",
+    "vulkanIcd": "/home/node/.cache/ms-playwright/chromium-1187/chrome-linux/vk_swiftshader_icd.json",
+    "libraryPath": "/tmp/aiml-sysroot/usr/lib/aarch64-linux-gnu:/tmp/aiml-sysroot/lib/aarch64-linux-gnu:/home/node/.cache/ms-playwright/chromium-1187/chrome-linux",
+    "allowSoftware": true,
+    "softwareRasterizer": true
+  },
+  "build": {
+    "command": "npm run build",
+    "status": 0,
+    "stdoutTail": "\n> automotive-interior-material-lab@1.0.0 build\n> tsc --noEmit && vite build\n\n\u001b[36mvite v6.0.5 \u001b[32mbuilding for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m✓\u001b[39m 17 modules transformed.\nrendering chunks...\ncomputing gzip size...\n\u001b[2mdist/\u001b[22m\u001b[32mindex.html                 \u001b[39m\u001b[1m\u001b[2m 3.94 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip:  1.63 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[2massets/\u001b[22m\u001b[35mindex-CctKGVq6.css  \u001b[39m\u001b[1m\u001b[2m 8.75 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip:  2.58 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[2massets/\u001b[22m\u001b[36mindex-BQA6sFV4.js   \u001b[39m\u001b[1m\u001b[2m75.52 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m │ gzip: 27.89 kB\u001b[22m\n\u001b[32m✓ built in 259ms\u001b[39m",
+    "stderrTail": "",
+    "mainJs": {
+      "file": "dist/assets/index-BQA6sFV4.js",
+      "bytes": 77905
+    }
+  },
+  "capabilities": {
+    "checkedAt": "2026-11-15T12:38:37.972Z",
+    "hasGpu": true,
+    "backendRequested": "webgpu",
+    "adapter": {
+      "vendor": "google",
+      "architecture": "swiftshader",
+      "description": "",
+      "device": "",
+      "isFallbackAdapter": false,
+      "software": true
+    },
+    "deviceLimits": {
+      "maxTextureDimension2D": 8192,
+      "maxBufferSize": 268435456
+    },
+    "features": [
+      "depth32float-stencil8",
+      "rg11b10ufloat-renderable",
+      "bgra8unorm-storage",
+      "texture-compression-bc",
+      "core-features-and-limits",
+      "chromium-experimental-timestamp-query-inside-passes",
+      "float32-filterable",
+      "indirect-first-instance",
+      "texture-compression-astc-sliced-3d",
+      "float32-blendable",
+      "texture-compression-astc",
+      "texture-compression-etc2",
+      "depth-clip-control",
+      "texture-compression-bc-sliced-3d",
+      "clip-distances",
+      "chromium-experimental-unorm16-texture-formats",
+      "timestamp-query",
+      "texture-component-swizzle",
+      "subgroups"
+    ],
+    "formats": {
+      "rgba8unorm": {
+        "ok": true,
+        "usage": "color-attachment"
+      },
+      "rgba8unorm-srgb": {
+        "ok": true,
+        "usage": "color-attachment"
+      },
+      "depth24plus": {
+        "ok": true,
+        "usage": "depth-attachment"
+      }
+    },
+    "floatTargets": {
+      "rgba16float": {
+        "ok": true,
+        "value": 2.5
+      }
+    },
+    "problems": [],
+    "negativeControls": [
+      {
+        "name": "纹理格式 aiml-missing-format-probe",
+        "ok": false,
+        "error": "Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'format' property from 'GPUTextureDescriptor': The provided value 'aiml-missing-format-probe' is not a valid enum value of type GPUTextureFormat."
+      },
+      {
+        "name": "浮点目标 rgba8unorm",
+        "ok": false,
+        "error": "写入 2.5 读到 NaN，目标不是可存储的浮点范围"
+      },
+      {
+        "name": "限制 maxTextureDimension2D=1000000000",
+        "ok": false,
+        "error": "设备报告 8192"
+      }
+    ]
+  },
+  "compile": {
+    "ready": true,
+    "modules": [
+      {
+        "label": "scene-shader",
+        "ok": true,
+        "messages": []
+      },
+      {
+        "label": "composite-shader",
+        "ok": true,
+        "messages": []
+      }
+    ],
+    "pipelines": [
+      {
+        "label": "studio-hdr",
+        "ok": true
+      },
+      {
+        "label": "bench-rgba8",
+        "ok": true
+      },
+      {
+        "label": "composite",
+        "ok": true
+      }
+    ],
+    "ok": true,
+    "unsupported": false
+  },
+  "kernel": {
+    "swatch": "leather-black",
+    "params": {
+      "baseColor": "#1b1b1d",
+      "roughness": 0.62,
+      "metallic": 0,
+      "normalStrength": 1,
+      "normalEnabled": true,
+      "uvScale": 3.2
+    },
+    "revision": 0,
+    "hasSpecimen": true,
+    "failure": null,
+    "controls": {
+      "material": 5,
+      "normal": 2,
+      "specimen": 2,
+      "swatches": 7
+    },
+    "reject": {
+      "clamp": {
+        "roughness": 1,
+        "max": 1,
+        "revisionGain": 1
+      },
+      "beforeDirect": {
+        "yaw": 0,
+        "rev": 1,
+        "rough": 1
+      },
+      "directAccepted": false,
+      "afterDirect": {
+        "yaw": 0,
+        "rev": 1,
+        "rough": 1
+      },
+      "failure": {
+        "code": "specimen-out-of-range",
+        "command": "setSpecimenYaw",
+        "message": "样件偏航 99 超出 [-3.141592653589793, 3.141592653589793]",
+        "at": 1794746328448
+      },
+      "failedNote": "未应用（setSpecimenYaw）：样件偏航 99 超出 [-3.141592653589793, 3.141592653589793]",
+      "rendererAlive": true
+    }
+  },
+  "frames": [
+    {
+      "id": "baseline",
+      "file": "artifacts/frames/baseline.png",
+      "summary": {
+        "width": 842,
+        "height": 835,
+        "mean": 37.06352767423072,
+        "max": 254.99999999999997,
+        "pixels": 703070,
+        "opaqueRatio": 1
+      }
+    },
+    {
+      "id": "roughness",
+      "file": "artifacts/frames/roughness.png",
+      "summary": {
+        "width": 842,
+        "height": 835,
+        "mean": 32.84845299917466,
+        "max": 254.99999999999997,
+        "pixels": 703070,
+        "opaqueRatio": 1
+      },
+      "diff": {
+        "width": 842,
+        "height": 835,
+        "changedPixels": 206559,
+        "changedRatio": 0.2937957813588974,
+        "meanDelta": 4.30707184206409
+      }
+    },
+    {
+      "id": "rotated",
+      "file": "artifacts/frames/rotated.png",
+      "summary": {
+        "width": 842,
+        "height": 835,
+        "mean": 31.527138319558254,
+        "max": 254.99999999999997,
+        "pixels": 703070,
+        "opaqueRatio": 1
+      },
+      "diff": {
+        "width": 842,
+        "height": 835,
+        "changedPixels": 63516,
+        "changedRatio": 0.09034093333522977,
+        "meanDelta": 5.97800503506052
+      }
+    }
+  ],
+  "bench": [
+    {
+      "id": "diffuse",
+      "maxAbsError": 0,
+      "samples": [
+        {
+          "label": "纯漫反射",
+          "gpu": [
+            172,
+            173,
+            178
+          ],
+          "cpu": [
+            172,
+            173,
+            178
+          ],
+          "d": 0
+        }
+      ]
+    },
+    {
+      "id": "flat-normal",
+      "maxAbsError": 1,
+      "samples": [
+        {
+          "label": "平面法线",
+          "gpu": [
+            172,
+            173,
+            178
+          ],
+          "cpu": [
+            172,
+            174,
+            178
+          ],
+          "d": 1
+        }
+      ]
+    },
+    {
+      "id": "roughness",
+      "maxAbsError": 2,
+      "samples": [
+        {
+          "label": "R=0.05 / M=1.00",
+          "gpu": [
+            157,
+            159,
+            160
+          ],
+          "cpu": [
+            159,
+            160,
+            161
+          ],
+          "d": 2
+        },
+        {
+          "label": "R=0.25 / M=1.00",
+          "gpu": [
+            151,
+            153,
+            154
+          ],
+          "cpu": [
+            152,
+            154,
+            155
+          ],
+          "d": 1
+        },
+        {
+          "label": "R=0.55 / M=1.00",
+          "gpu": [
+            148,
+            150,
+            153
+          ],
+          "cpu": [
+            148,
+            150,
+            153
+          ],
+          "d": 0
+        },
+        {
+          "label": "R=0.90 / M=1.00",
+          "gpu": [
+            127,
+            129,
+            131
+          ],
+          "cpu": [
+            127,
+            129,
+            131
+          ],
+          "d": 0
+        }
+      ]
+    },
+    {
+      "id": "boundaries",
+      "maxAbsError": 0,
+      "samples": [
+        {
+          "label": "黑色 R=1.00 M=0",
+          "gpu": [
+            40,
+            40,
+            40
+          ],
+          "cpu": [
+            40,
+            40,
+            40
+          ],
+          "d": 0
+        },
+        {
+          "label": "近镜面 R=0.02 M=1",
+          "gpu": [
+            255,
+            255,
+            255
+          ],
+          "cpu": [
+            255,
+            255,
+            255
+          ],
+          "d": 0
+        },
+        {
+          "label": "近镜面黑 R=0.02 M=1",
+          "gpu": [
+            14,
+            14,
+            14
+          ],
+          "cpu": [
+            14,
+            14,
+            14
+          ],
+          "d": 0
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "构建输入干净",
+      "pass": false,
+      "detail": "存在未提交的构建输入：M index.html, M package.json, M src/gpu/device.ts, M src/gpu/renderer.ts, M src/main.ts",
+      "blocking": false
+    },
+    {
+      "name": "可复现构建成功",
+      "pass": true,
+      "detail": "npm run build",
+      "blocking": true
+    },
+    {
+      "name": "产物包含 index.html",
+      "pass": true,
+      "detail": "dist/index.html",
+      "blocking": true
+    },
+    {
+      "name": "产物不含源目录 src",
+      "pass": true,
+      "detail": "ok",
+      "blocking": false
+    },
+    {
+      "name": "产物不含源目录 node_modules",
+      "pass": true,
+      "detail": "ok",
+      "blocking": false
+    },
+    {
+      "name": "产物不含源目录 tests",
+      "pass": true,
+      "detail": "ok",
+      "blocking": false
+    },
+    {
+      "name": "产物不含源目录 scripts",
+      "pass": true,
+      "detail": "ok",
+      "blocking": false
+    },
+    {
+      "name": "产物不含源目录 release",
+      "pass": true,
+      "detail": "ok",
+      "blocking": false
+    },
+    {
+      "name": "主脚本体积合理",
+      "pass": true,
+      "detail": "index-BQA6sFV4.js 77905 B",
+      "blocking": true
+    },
+    {
+      "name": "浏览器可用",
+      "pass": true,
+      "detail": "/home/node/.cache/ms-playwright/chromium-1187/chrome-linux/chrome",
+      "blocking": true
+    },
+    {
+      "name": "Vulkan ICD 可用",
+      "pass": true,
+      "detail": "/home/node/.cache/ms-playwright/chromium-1187/chrome-linux/vk_swiftshader_icd.json",
+      "blocking": false
+    },
+    {
+      "name": "能力探测通过",
+      "pass": true,
+      "detail": "全部必需格式与限制满足",
+      "blocking": true
+    },
+    {
+      "name": "能力缺失被阻止而不是回退",
+      "pass": true,
+      "detail": "ok:纹理格式 aiml-missing-format-probe | ok:浮点目标 rgba8unorm | ok:限制 maxTextureDimension2D=1000000000",
+      "blocking": true
+    },
+    {
+      "name": "适配器路径符合配置",
+      "pass": true,
+      "detail": "软件光栅器 (swiftshader)，按 --allow-software 记录为非硬件验收",
+      "blocking": false
+    },
+    {
+      "name": "应用冷启动完成",
+      "pass": true,
+      "detail": "设备、编译状态与画布尺寸就绪",
+      "blocking": true
+    },
+    {
+      "name": "着色器编译成功",
+      "pass": true,
+      "detail": "modules[scene-shader:ok composite-shader:ok] pipelines[studio-hdr:ok bench-rgba8:ok composite:ok]",
+      "blocking": true
+    },
+    {
+      "name": "内核驱动材质控件",
+      "pass": true,
+      "detail": "材质 5 / 法线 2 / 样件 2 个控件",
+      "blocking": true
+    },
+    {
+      "name": "越界输入被整体拒绝而非半应用",
+      "pass": true,
+      "detail": "滑杆钳制=1（合法=true） 直接越界接受=false 状态未变=true failure=specimen-out-of-range 面板提示=有",
+      "blocking": true
+    },
+    {
+      "name": "内置样例预设走完原流程",
+      "pass": true,
+      "detail": "样块 leather-black R=0.62",
+      "blocking": true
+    },
+    {
+      "name": "真实帧非空白",
+      "pass": true,
+      "detail": "mean=37.06 max=254.99999999999997 842x835",
+      "blocking": true
+    },
+    {
+      "name": "参考镜头帧一致",
+      "pass": true,
+      "detail": "帧统计与参考一致 (mean 37.06 vs 37.06, max 255 vs 255)",
+      "blocking": true
+    },
+    {
+      "name": "粗糙度调整改变真实帧",
+      "pass": true,
+      "detail": "roughness 0.16 changed=29.38% meanΔ=4.31",
+      "blocking": true
+    },
+    {
+      "name": "样件旋转改变真实帧",
+      "pass": true,
+      "detail": "changed=9.03% meanΔ=5.98",
+      "blocking": true
+    },
+    {
+      "name": "基准 diffuse 与 CPU 参考一致",
+      "pass": true,
+      "detail": "maxErr=0",
+      "blocking": true
+    },
+    {
+      "name": "基准 flat-normal 与 CPU 参考一致",
+      "pass": true,
+      "detail": "maxErr=1",
+      "blocking": true
+    },
+    {
+      "name": "基准 roughness 与 CPU 参考一致",
+      "pass": true,
+      "detail": "maxErr=2",
+      "blocking": true
+    },
+    {
+      "name": "基准 boundaries 与 CPU 参考一致",
+      "pass": true,
+      "detail": "maxErr=0",
+      "blocking": true
+    }
+  ],
+  "verdict": "verified-software-fallback",
+  "missingCapabilityControls": [
+    {
+      "name": "纹理格式 aiml-missing-format-probe",
+      "ok": true,
+      "detail": "Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'format' property from 'GPUTextureDescriptor': The provided value 'aiml-missing-format-probe' is not a valid enum value of type GPUTextureFormat."
+    },
+    {
+      "name": "浮点目标 rgba8unorm",
+      "ok": true,
+      "detail": "写入 2.5 读到 NaN，目标不是可存储的浮点范围"
+    },
+    {
+      "name": "限制 maxTextureDimension2D=1000000000",
+      "ok": true,
+      "detail": "设备报告 8192"
+    }
+  ],
+  "reference": {
+    "ok": true,
+    "existed": true,
+    "current": {
+      "width": 842,
+      "height": 835,
+      "mean": 37.06,
+      "max": 255,
+      "opaqueRatio": 1
+    },
+    "expected": {
+      "width": 842,
+      "height": 835,
+      "mean": 37.06,
+      "max": 255,
+      "opaqueRatio": 1
+    },
+    "detail": "帧统计与参考一致 (mean 37.06 vs 37.06, max 255 vs 255)"
+  },
+  "logs": "[info] WebGPU is experimental on this platform. See https://github.com/gpuweb/gpuweb/wiki/Implementation-Status#implementation-status,[error] Failed to load resource: the server responded with a status of 404 (Not Found),[info] WebGPU is experimental on this platform. See https://github.com/gpuweb/gpuweb/wiki/Implementation-Status#implementation-status",
+  "compileStable": {
+    "ok": true,
+    "ready": true
+  },
+  "finishedAt": "2026-11-15T12:40:14.594Z",
+  "durationMs": 98343,
+  "hardwarePath": "not-verified",
+  "blockingFailures": [],
+  "warnings": [
+    {
+      "name": "构建输入干净",
+      "detail": "存在未提交的构建输入：M index.html, M package.json, M src/gpu/device.ts, M src/gpu/renderer.ts, M src/main.ts"
+    }
+  ]
+}
